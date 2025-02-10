@@ -1,71 +1,49 @@
-const { zkVerifySession, ZkVerifyEvents } = require('zkverifyjs');
-const fs = require('fs');
+const {zkVerifySession, ZkVerifyEvents} = require("zkverifyjs");
+const fs = require("fs");
+
 require('dotenv').config();
 
 async function executeVerificationTransaction(proofPath, publicSignalsPath) {
-  // Read the binary files
-  const proofData = fs.readFileSync(proofPath);
-  const publicSignalsData = fs.readFileSync(publicSignalsPath);
+  const proof = require("../proof.json"); // Following the Risc Zero tutorial
 
-  // Convert binary data to hex strings with 0x prefix
-  const proofHex = '0x' + Buffer.from(proofData).toString('hex');
-  // print(proofHex);
-  const publicSignalsHex = '0x' + Buffer.from(publicSignalsData).toString('hex');
-  console.log(publicSignalsHex);  
-  // Start a new zkVerifySession on testnet
-  const session = await zkVerifySession.start()
-    .Testnet()  
-    .withAccount(process.env.SEED_PHRASE);
 
-    console.log(session);
+  const session = await zkVerifySession.start().Testnet().withAccount(process.env.SEED_PHRASE);
   // Execute the verification transaction
-  const { events, transactionResult } = await session.verify()
-    .risc0()
-    .waitForPublishedAttestation()
-    .execute({
-      proofData: {
-        vk: "0xa19d1c25feaa9413d335285094e0add13f91d6650a6333bb1703c8f49a88d6c4",
-        proof: proofHex,
-        publicSignals: publicSignalsHex,
-        version: 'V1_2'
-      }
+  const {events, txResults} = await session.verify().risc0().waitForPublishedAttestation()
+  .execute({proofData:{
+      proof: proof.proof,
+      vk: proof.image_id,
+      publicSignals: proof.pub_inputs,
+      version: "V1_2" // Mention the R0 version
+  }})
+
+  let attestationId, leafDigest;
+    events.on(ZkVerifyEvents.IncludedInBlock, (eventData) => {
+        console.log('Transaction included in block:', eventData);
+        attestationId = eventData.attestationId;
+        leafDigest = eventData.leafDigest;
+        // Handle the event data as needed
     });
 
-  // Listen for the 'includedInBlock' event
-  events.on(ZkVerifyEvents.IncludedInBlock, (eventData) => {
-    console.log('Transaction included in block:', eventData);
-    // Handle the event data as needed
-  });
+    // Listen for the 'finalized' event
+    events.on(ZkVerifyEvents.Finalized, (eventData) => {
+        console.log('Transaction finalized:', eventData);
+        // Handle the event data as needed
+    });
 
-  // Listen for the 'finalized' event
-  events.on(ZkVerifyEvents.Finalized, (eventData) => {
-    console.log('Transaction finalized:', eventData);
-    // Handle the event data as needed
-  });
+    events.on(ZkVerifyEvents.AttestationConfirmed, async(eventData) => {
+        console.log('Attestation Confirmed', eventData);
+        const proofDetails = await session.poe(attestationId, leafDigest);
+        proofDetails.attestationId = eventData.id;
+        fs.writeFileSync("attestation.json", JSON.stringify(proofDetails, null, 2));
+        console.log("proofDetails", proofDetails);
+    })
 
-  // Handle errors during the transaction process
-  events.on('error', (error) => {
-    console.error('An error occurred during the transaction:', error);
-  });
-
-  try {
-    // Await the final transaction result
-    const transactionInfo = await transactionResult;
-
-    // Log the final transaction result
-    console.log('Transaction completed successfully:', transactionInfo);
-  } catch (error) {
-    // Handle any errors that occurred during the transaction
-    console.error('Transaction failed:', error);
-  } finally {
-    // Close the session when done
-    await session.close();
-  }
 }
 
 // File paths
-const proofPath = "/home/gautam/Desktop/zk_dtp/inner.bin";
-const publicSignalsPath = "/home/gautam/Desktop/zk_dtp/journal.bin";
+const proofPath = "../proof.bin";
+const publicSignalsPath = "../journal.bin";
 
 // Execute the transaction
 executeVerificationTransaction(proofPath, publicSignalsPath);
