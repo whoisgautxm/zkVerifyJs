@@ -9,22 +9,25 @@ async function executeVerificationTransaction(proofPath, publicSignalsPath) {
 
   // Convert binary data to hex strings with 0x prefix
   const proofHex = '0x' + Buffer.from(proofData).toString('hex');
+  // print(proofHex);
   const publicSignalsHex = '0x' + Buffer.from(publicSignalsData).toString('hex');
-
+  console.log(publicSignalsHex);  
   // Start a new zkVerifySession on testnet
   const session = await zkVerifySession.start()
-    .Custom("wss://testnet-rpc.zkverify.io")
+    .Testnet()  
     .withAccount(process.env.SEED_PHRASE);
 
+    console.log(session);
   // Execute the verification transaction
-  const { events, transactionResult } = await session.verify().risc0()
+  const { events, transactionResult } = await session.verify()
+    .risc0()
     .waitForPublishedAttestation()
     .execute({
       proofData: {
-        vk: "0x63b4b9a7e2a5d81202e760d3c6a1c3fa32728a69070d35907490987e3988cd5d",
+        vk: "0xa19d1c25feaa9413d335285094e0add13f91d6650a6333bb1703c8f49a88d6c4",
         proof: proofHex,
         publicSignals: publicSignalsHex,
-        version: "V1_0"
+        version: 'V1_2'
       }
     });
 
